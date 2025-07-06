@@ -1,7 +1,7 @@
 {
   "name": "expense-tracker-backend",
   "version": "1.0.0",
-  "description": "Backend API for Simple Expense Tracker",
+  "description": "Backend API for Simple Expense Tracker (File-based storage)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,12 +10,11 @@
     "test": "jest",
     "test:watch": "jest --watch"
   },
-  "keywords": ["expense-tracker", "mongodb", "express", "nodejs", "rest-api"],
+  "keywords": ["expense-tracker", "file-storage", "express", "nodejs", "rest-api"],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
-    "mongoose": "^7.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "bcryptjs": "^2.4.3",

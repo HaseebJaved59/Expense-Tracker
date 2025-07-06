@@ -1,56 +1,70 @@
 const express = require("express")
-const Transaction = require("../models/Transaction")
 const { validateTransaction } = require("../middleware/validation")
 const { asyncHandler } = require("../middleware/asyncHandler")
+const {
+  getTransactions,
+  addTransaction,
+  updateTransaction,
+  deleteTransaction,
+  getTransactionById,
+  calculateSummary,
+  calculateExpenseBreakdown,
+} = require("../utils/fileStorage")
 
 const router = express.Router()
 
 // @desc    Get all transactions
 // @route   GET /api/transactions
-// @access  Public (should be protected in production)
+// @access  Public
 router.get(
   "/",
   asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, type, category, startDate, endDate, search } = req.query
 
-    // Build filter object
-    const filter = {}
+    let transactions = getTransactions()
 
+    // Apply filters
     if (type && ["income", "expense"].includes(type)) {
-      filter.type = type
+      transactions = transactions.filter((t) => t.type === type)
     }
 
     if (category) {
-      filter.category = category
+      transactions = transactions.filter((t) => t.category === category)
     }
 
     if (startDate || endDate) {
-      filter.date = {}
-      if (startDate) filter.date.$gte = new Date(startDate)
-      if (endDate) filter.date.$lte = new Date(endDate)
+      transactions = transactions.filter((t) => {
+        const transactionDate = new Date(t.date)
+        const start = startDate ? new Date(startDate) : null
+        const end = endDate ? new Date(endDate) : null
+
+        if (start && transactionDate < start) return false
+        if (end && transactionDate > end) return false
+        return true
+      })
     }
 
     if (search) {
-      filter.title = { $regex: search, $options: "i" }
+      const searchLower = search.toLowerCase()
+      transactions = transactions.filter((t) => t.title.toLowerCase().includes(searchLower))
     }
 
-    // Execute query with pagination
-    const transactions = await Transaction.find(filter)
-      .sort({ date: -1, createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .exec()
+    // Sort by date (newest first)
+    transactions.sort((a, b) => new Date(b.date) - new Date(a.date))
 
-    const total = await Transaction.countDocuments(filter)
+    // Apply pagination
+    const startIndex = (page - 1) * limit
+    const endIndex = startIndex + Number.parseInt(limit)
+    const paginatedTransactions = transactions.slice(startIndex, endIndex)
 
     res.status(200).json({
       success: true,
-      data: transactions,
+      data: paginatedTransactions,
       pagination: {
         page: Number.parseInt(page),
         limit: Number.parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit),
+        total: transactions.length,
+        pages: Math.ceil(transactions.length / limit),
       },
     })
   }),
@@ -62,7 +76,7 @@ router.get(
 router.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const transaction = await Transaction.findById(req.params.id)
+    const transaction = getTransactionById(req.params.id)
 
     if (!transaction) {
       return res.status(404).json({
@@ -85,7 +99,7 @@ router.post(
   "/",
   validateTransaction,
   asyncHandler(async (req, res) => {
-    const transaction = await Transaction.create(req.body)
+    const transaction = addTransaction(req.body)
 
     res.status(201).json({
       success: true,
@@ -102,10 +116,7 @@ router.put(
   "/:id",
   validateTransaction,
   asyncHandler(async (req, res) => {
-    const transaction = await Transaction.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    })
+    const transaction = updateTransaction(req.params.id, req.body)
 
     if (!transaction) {
       return res.status(404).json({
@@ -128,16 +139,14 @@ router.put(
 router.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    const transaction = await Transaction.findById(req.params.id)
+    const deleted = deleteTransaction(req.params.id)
 
-    if (!transaction) {
+    if (!deleted) {
       return res.status(404).json({
         success: false,
         message: "Transaction not found",
       })
     }
-
-    await transaction.deleteOne()
 
     res.status(200).json({
       success: true,
@@ -152,7 +161,7 @@ router.delete(
 router.get(
   "/summary/stats",
   asyncHandler(async (req, res) => {
-    const summary = await Transaction.getSummary()
+    const summary = calculateSummary()
 
     res.status(200).json({
       success: true,
@@ -167,7 +176,7 @@ router.get(
 router.get(
   "/summary/breakdown",
   asyncHandler(async (req, res) => {
-    const breakdown = await Transaction.getExpenseBreakdown()
+    const breakdown = calculateExpenseBreakdown()
 
     res.status(200).json({
       success: true,

@@ -1,7 +1,8 @@
 const express = require("express")
-const User = require("../models/User")
+const bcrypt = require("bcryptjs")
 const { validateUser } = require("../middleware/validation")
 const { asyncHandler } = require("../middleware/asyncHandler")
+const { addUser, getUserByEmail, getUserById, updateUser } = require("../utils/fileStorage")
 
 const router = express.Router()
 
@@ -15,7 +16,7 @@ router.post(
     const { name, email, password } = req.body
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email })
+    const existingUser = getUserByEmail(email)
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -23,22 +24,27 @@ router.post(
       })
     }
 
+    // Hash password
+    const salt = await bcrypt.genSalt(12)
+    const hashedPassword = await bcrypt.hash(password, salt)
+
     // Create user
-    const user = await User.create({
+    const userData = {
       name,
-      email,
-      password,
-    })
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      currency: "USD",
+      monthlyBudget: 0,
+    }
+
+    const user = addUser(userData)
+
+    // Remove password from response
+    const { password: _, ...userResponse } = user
 
     res.status(201).json({
       success: true,
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        currency: user.currency,
-        monthlyBudget: user.monthlyBudget,
-      },
+      data: userResponse,
       message: "User registered successfully",
     })
   }),
@@ -60,8 +66,8 @@ router.post(
       })
     }
 
-    // Check for user and include password
-    const user = await User.findOne({ email }).select("+password")
+    // Check for user
+    const user = getUserByEmail(email)
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -70,7 +76,7 @@ router.post(
     }
 
     // Check password
-    const isMatch = await user.comparePassword(password)
+    const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -78,15 +84,12 @@ router.post(
       })
     }
 
+    // Remove password from response
+    const { password: _, ...userResponse } = user
+
     res.status(200).json({
       success: true,
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        currency: user.currency,
-        monthlyBudget: user.monthlyBudget,
-      },
+      data: userResponse,
       message: "Login successful",
     })
   }),
@@ -98,7 +101,7 @@ router.post(
 router.get(
   "/profile/:id",
   asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id)
+    const user = getUserById(req.params.id)
 
     if (!user) {
       return res.status(404).json({
@@ -107,9 +110,12 @@ router.get(
       })
     }
 
+    // Remove password from response
+    const { password: _, ...userResponse } = user
+
     res.status(200).json({
       success: true,
-      data: user,
+      data: userResponse,
     })
   }),
 )
@@ -122,14 +128,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const { name, currency, monthlyBudget } = req.body
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { name, currency, monthlyBudget },
-      {
-        new: true,
-        runValidators: true,
-      },
-    )
+    const user = updateUser(req.params.id, { name, currency, monthlyBudget })
 
     if (!user) {
       return res.status(404).json({
@@ -138,9 +137,12 @@ router.put(
       })
     }
 
+    // Remove password from response
+    const { password: _, ...userResponse } = user
+
     res.status(200).json({
       success: true,
-      data: user,
+      data: userResponse,
       message: "Profile updated successfully",
     })
   }),

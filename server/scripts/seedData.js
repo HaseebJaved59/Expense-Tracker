@@ -2,6 +2,9 @@ const mongoose = require("mongoose")
 const dotenv = require("dotenv")
 const Transaction = require("../models/Transaction")
 const User = require("../models/User")
+const path = require("path")
+const { initializeDataFiles, addUser, addTransaction, getUsers, getTransactions } = require("../utils/fileStorage")
+const bcrypt = require("bcryptjs")
 
 // Load environment variables
 dotenv.config()
@@ -13,7 +16,7 @@ const sampleTransactions = [
     type: "income",
     amount: 3500.0,
     category: "salary",
-    date: new Date("2024-01-01"),
+    date: "2024-01-01",
     description: "Monthly salary payment",
   },
   {
@@ -21,7 +24,7 @@ const sampleTransactions = [
     type: "expense",
     amount: 85.5,
     category: "food",
-    date: new Date("2024-01-15"),
+    date: "2024-01-15",
     description: "Weekly grocery shopping at supermarket",
   },
   {
@@ -29,7 +32,7 @@ const sampleTransactions = [
     type: "expense",
     amount: 120.0,
     category: "bills",
-    date: new Date("2024-01-10"),
+    date: "2024-01-10",
     description: "Monthly gas utility bill",
   },
   {
@@ -37,7 +40,7 @@ const sampleTransactions = [
     type: "expense",
     amount: 25.75,
     category: "transport",
-    date: new Date("2024-01-12"),
+    date: "2024-01-12",
     description: "Ride to downtown",
   },
   {
@@ -45,7 +48,7 @@ const sampleTransactions = [
     type: "income",
     amount: 800.0,
     category: "freelance",
-    date: new Date("2024-01-08"),
+    date: "2024-01-08",
     description: "Web development project payment",
   },
   {
@@ -53,7 +56,7 @@ const sampleTransactions = [
     type: "expense",
     amount: 150.25,
     category: "shopping",
-    date: new Date("2024-01-14"),
+    date: "2024-01-14",
     description: "Clothes and accessories",
   },
   {
@@ -61,7 +64,7 @@ const sampleTransactions = [
     type: "expense",
     amount: 65.0,
     category: "food",
-    date: new Date("2024-01-16"),
+    date: "2024-01-16",
     description: "Dinner with friends",
   },
   {
@@ -69,7 +72,7 @@ const sampleTransactions = [
     type: "expense",
     amount: 95.3,
     category: "bills",
-    date: new Date("2024-01-05"),
+    date: "2024-01-05",
     description: "Monthly electricity bill",
   },
 ]
@@ -84,33 +87,55 @@ const sampleUser = {
 
 const seedDatabase = async () => {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/expense-tracker")
-    console.log("✅ Connected to MongoDB")
+    console.log("🌱 Starting database seeding...")
 
-    // Clear existing data
-    await Transaction.deleteMany({})
-    await User.deleteMany({})
+    // Initialize data files
+    initializeDataFiles()
+
+    // Clear existing data by reinitializing files
+    const fs = require("fs")
+    const DATA_DIR = path.join(__dirname, "../data")
+    const TRANSACTIONS_FILE = path.join(DATA_DIR, "transactions.json")
+    const USERS_FILE = path.join(DATA_DIR, "users.json")
+
+    fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify([], null, 2))
+    fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2))
     console.log("🗑️  Cleared existing data")
 
     // Create sample user
-    const user = await User.create(sampleUser)
+    const salt = await bcrypt.genSalt(12)
+    const hashedPassword = await bcrypt.hash(sampleUser.password, salt)
+
+    const userData = {
+      ...sampleUser,
+      email: sampleUser.email.toLowerCase(),
+      password: hashedPassword,
+    }
+
+    const user = addUser(userData)
     console.log("👤 Created sample user")
 
-    // Add userId to transactions and create them
-    const transactionsWithUser = sampleTransactions.map((transaction) => ({
-      ...transaction,
-      userId: user._id,
-    }))
+    // Add sample transactions
+    sampleTransactions.forEach((transaction) => {
+      addTransaction({
+        ...transaction,
+        userId: user.id,
+      })
+    })
 
-    await Transaction.insertMany(transactionsWithUser)
     console.log("💰 Created sample transactions")
 
     console.log("🎉 Database seeded successfully!")
     console.log(`📊 Created ${sampleTransactions.length} transactions`)
     console.log(`👤 Created 1 user (${user.email})`)
+    console.log(`📁 Data stored in: ${DATA_DIR}`)
 
-    process.exit(0)
+    // Display current data counts
+    const users = getUsers()
+    const transactions = getTransactions()
+    console.log(`\n📈 Current data:`)
+    console.log(`   Users: ${users.length}`)
+    console.log(`   Transactions: ${transactions.length}`)
   } catch (error) {
     console.error("❌ Error seeding database:", error)
     process.exit(1)
@@ -118,4 +143,8 @@ const seedDatabase = async () => {
 }
 
 // Run the seed function
-seedDatabase()
+if (require.main === module) {
+  seedDatabase()
+}
+
+module.exports = { seedDatabase }

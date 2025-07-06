@@ -1,16 +1,20 @@
 const express = require("express")
-const mongoose = require("mongoose")
 const cors = require("cors")
 const dotenv = require("dotenv")
+const path = require("path")
 const transactionRoutes = require("./routes/transactions")
 const userRoutes = require("./routes/users")
 const { errorHandler } = require("./middleware/errorHandler")
+const { initializeDataFiles } = require("./utils/fileStorage")
 
 // Load environment variables
 dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 5000
+
+// Initialize data files
+initializeDataFiles()
 
 // Middleware
 app.use(
@@ -30,8 +34,9 @@ app.use("/api/users", userRoutes)
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     status: "OK",
-    message: "Expense Tracker API is running",
+    message: "Expense Tracker API is running (File-based storage)",
     timestamp: new Date().toISOString(),
+    storage: "JSON Files",
   })
 })
 
@@ -46,27 +51,16 @@ app.use("*", (req, res) => {
   })
 })
 
-// Database connection
-mongoose
-  .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/expense-tracker", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log("✅ Connected to MongoDB")
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`)
-    })
-  })
-  .catch((error) => {
-    console.error("❌ MongoDB connection error:", error)
-    process.exit(1)
-  })
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`)
+  console.log(`💾 Using file-based storage`)
+  console.log(`📁 Data files location: ${path.join(__dirname, "data")}`)
+})
 
 // Graceful shutdown
-process.on("SIGINT", async () => {
+process.on("SIGINT", () => {
   console.log("\n🛑 Shutting down server...")
-  await mongoose.connection.close()
   process.exit(0)
 })
 
